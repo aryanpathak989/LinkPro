@@ -1,6 +1,6 @@
 const express = require('express')
 const app = express()
-const db = require('./lib/database')
+// const db = require('./lib/database')
 const tblUrl = require('./models/TableUrl')
 const tblTracking = require('./models/Tracking')
 const urlroutes = require("./routes/urlShortner")
@@ -15,6 +15,6 @@ app.use(cors())
 app.use("",urlroutes)
 
 app.listen(PORT,()=>{
-    db.sync()
+    // db.sync()
     console.log("Listenig at port "+PORT)
 })

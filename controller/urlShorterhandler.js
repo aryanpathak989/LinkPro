@@ -73,7 +73,7 @@ exports.urlShortner = async (req, res) => {
 
 exports.getActualUrl = async (req, res) => {
     try {
-        const actualUrl = req.params.url;
+        // const actualUrl = req.params.url;
 
         // 1. Check Redis cache
         // const cached = await redis.get(actualUrl);
@@ -87,17 +87,18 @@ exports.getActualUrl = async (req, res) => {
         // }
 
         // 2. Fallback to DB
-        const url = await Url.findOne({ where: { urlId: actualUrl } });
-        if (!url) return res.status(200).send("Url not found");
+        // const url = await Url.findOne({ where: { urlId: actualUrl } });
+        // if (!url) return res.status(200).send("Url not found");
 
-        // 3. Cache result
-        // await redis.set(actualUrl, url.actualUrl, 'EX', 3600);
+        // // 3. Cache result
+        // // await redis.set(actualUrl, url.actualUrl, 'EX', 3600);
 
-        // 4. Redirect
-        res.redirect(url.actualUrl);
+        // // 4. Redirect
+        // res.redirect(url.actualUrl);
 
         // 5. Background tracking (non-blocking)
-        trackUser(req, actualUrl);
+        const result  = trackUser(req, actualUrl);
+        res.status(200).send(result)
 
     } catch (err) {
         console.log(err);
@@ -129,7 +130,8 @@ async function trackUser(req, urlId) {
         //     console.warn('Location fetch failed:', err.message);
         // }
 
-        await Tracking.create({
+        // await Tracking.create();
+        return {
             urlId,
             ip,
             browser,
@@ -141,7 +143,7 @@ async function trackUser(req, urlId) {
             region: location.region || null,
             country: location.country_name || null,
             emailClient
-        });
+        }
 
     } catch (err) {
         console.error("Tracking error:", err.message);
