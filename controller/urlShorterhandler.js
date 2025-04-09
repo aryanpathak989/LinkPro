@@ -1,7 +1,7 @@
 const { where } = require("sequelize")
 const Url = require("../models/TableUrl")
 const tracking = require('../models/Tracking')
-const redis = require('../lib/redis')
+// const redis = require('../lib/redis')
 
 const UAParser = require('ua-parser-js');
 const fetch = require('node-fetch'); // adjust path if needed
@@ -76,22 +76,22 @@ exports.getActualUrl = async (req, res) => {
         const actualUrl = req.params.url;
 
         // 1. Check Redis cache
-        const cached = await redis.get(actualUrl);
-        if (cached) {
-            console.log("Getting url from cached server");
-            res.redirect(cached);
+        // const cached = await redis.get(actualUrl);
+        // if (cached) {
+        //     console.log("Getting url from cached server");
+        //     res.redirect(cached);
 
-            // Run tracking in background
-            trackUser(req, actualUrl);
-            return;
-        }
+        //     // Run tracking in background
+        //     trackUser(req, actualUrl);
+        //     return;
+        // }
 
         // 2. Fallback to DB
         const url = await Url.findOne({ where: { urlId: actualUrl } });
         if (!url) return res.status(200).send("Url not found");
 
         // 3. Cache result
-        await redis.set(actualUrl, url.actualUrl, 'EX', 3600);
+        // await redis.set(actualUrl, url.actualUrl, 'EX', 3600);
 
         // 4. Redirect
         res.redirect(url.actualUrl);
