@@ -2,6 +2,7 @@ const express = require('express')
 const app = express()
 const db = require('./lib/database')
 const tblUrl = require('./models/TableUrl')
+const tblTracking = require('./models/Tracking')
 const urlroutes = require("./routes/urlShortner")
 const cors = require('cors')
 
