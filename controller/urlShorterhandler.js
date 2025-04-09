@@ -97,7 +97,7 @@ exports.getActualUrl = async (req, res) => {
         // res.redirect(url.actualUrl);
 
         // 5. Background tracking (non-blocking)
-        const result  = trackUser(req, actualUrl);
+        const result  = trackUser(req, "testing");
         res.status(200).send(result)
 
     } catch (err) {
