@@ -73,28 +73,28 @@ exports.urlShortner = async (req, res) => {
 
 exports.getActualUrl = async (req, res) => {
     try {
-        // const actualUrl = req.params.url;
+        const actualUrl = req.params.url;
 
         // 1. Check Redis cache
-        // const cached = await redis.get(actualUrl);
-        // if (cached) {
-        //     console.log("Getting url from cached server");
-        //     res.redirect(cached);
+        const cached = await redis.get(actualUrl);
+        if (cached) {
+            console.log("Getting url from cached server");
+            res.redirect(cached);
 
-        //     // Run tracking in background
-        //     trackUser(req, actualUrl);
-        //     return;
-        // }
+            // Run tracking in background
+            trackUser(req, actualUrl);
+            return;
+        }
 
         // 2. Fallback to DB
-        // const url = await Url.findOne({ where: { urlId: actualUrl } });
-        // if (!url) return res.status(200).send("Url not found");
+        const url = await Url.findOne({ where: { urlId: actualUrl } });
+        if (!url) return res.status(200).send("Url not found");
 
-        // // 3. Cache result
-        // // await redis.set(actualUrl, url.actualUrl, 'EX', 3600);
+        // 3. Cache result
+        // await redis.set(actualUrl, url.actualUrl, 'EX', 3600);
 
-        // // 4. Redirect
-        // res.redirect(url.actualUrl);
+        // 4. Redirect
+        res.redirect(url.actualUrl);
 
         // 5. Background tracking (non-blocking)
         const result  =await  trackUser(req, "testing");
