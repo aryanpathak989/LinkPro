@@ -32,7 +32,7 @@ async function validateOtp(loginId, code) {
     where: { loginId, updatedAt: { [Op.gt]: cutoff } }
   });
   if (!row)         return { ok: false, reason: 'expired' };
-  if (row.code !== code) return { ok: false, reason: 'mismatch' };
+  if (row.code != code) return { ok: false, reason: 'mismatch' };
 
   await row.destroy();
   return { ok: true };

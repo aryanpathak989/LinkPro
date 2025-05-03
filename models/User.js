@@ -25,9 +25,17 @@ const Users = sequelize.define("tbluser", {
     allowNull:false,
     unique:true
   },
-  is_Phone_verfied:{
+  phone_code:{
+    type:DataTypes.INTEGER,
+    allowNull:false
+  },
+  is_Phone_verified: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  preferences:{
     type:DataTypes.BOOLEAN,
-    defaultValue:false
+    defaultValue:true
   }
 });
 
