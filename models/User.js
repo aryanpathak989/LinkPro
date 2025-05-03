@@ -22,7 +22,8 @@ const Users = sequelize.define("tbluser", {
   },
   phone_number:{
     type:DataTypes.STRING,
-    allowNull:false
+    allowNull:false,
+    unique:true
   },
   is_Phone_verfied:{
     type:DataTypes.BOOLEAN,

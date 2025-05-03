@@ -3,46 +3,75 @@ const bcrypt =require('bcrypt')
 const jwt = require('jsonwebtoken')
 const TableOtps = require('../models/TableOtps')
 const TelegramService = require('../lib/TelegramServices')
-const { Op } = require('sequelize')
+const { Op, where } = require('sequelize')
+const { validateOtp, requestOtp } = require('../util/otpUtility')
 
 //login,singup,logout,update details,send Otp,verify otp
-exports.signup = async (req,res)=>{
+exports.signup = async (req, res) => {
+    try {
+      const { first_name, last_name, phone_number, password } = req.body;
+  
+      if (!first_name || !last_name || !phone_number || !password) {
+        return res.status(400).json({ msg: 'All fields are required' });
+      }
+  
+      /* 1️⃣  Check if the user already exists */
+      let user = await Users.findOne({ where: { phone_number } });
+  
+      if (user?.is_Phone_verified) {
+        return res.status(409).json({ msg: 'Phone number already exists' });
+      }
+  
+      /* 2️⃣  Hash the password */
+      const rounds = Number(process.env.BCRYPT_SALT_ROUNDS ?? 10);
+      const hashed = await bcrypt.hash(password, rounds);
+  
+      /* 3️⃣  Upsert logic */
+      if (user) {
+        // MySQL doesn't support 'returning: true', so update then reload
+        await user.update({
+          first_name,
+          last_name,
+          password: hashed,
+          is_Phone_verified: false
+        });
+        await user.reload();   // get fresh values
+      } else {
+        user = await Users.create({
+          first_name,
+          last_name,
+          phone_number,
+          password: hashed,
+          is_Phone_verified: false
+        });
+      }
+  
+      /* 4️⃣  Build JWT payload */
+      const payload = { id: user.id, phone_number: user.phone_number };
+      const token   = jwt.sign(payload, process.env.AUTH_TOKEN, { expiresIn: '7d' });
+  
+      /* 5️⃣  Set cookie */
+      res.cookie('token', token, {
+        maxAge  : 7 * 24 * 60 * 60 * 1000,        // 7 days
+        httpOnly: true,
+        secure  : process.env.NODE_ENV === 'production',
+        sameSite: 'lax'
+      });
 
-    const {first_name,last_name,phone_number,password} = req.body
-    if(!first_name || !last_name ||!phone_number ||!password){
-        return res.status(403).json({msg:"All the required field is necessary"})
+      const loginId = phone_number
+      await requestOtp(loginId,first_name,last_name)
+  
+      /* 6️⃣  Single success response */
+      return res.status(201).json({
+        success: true,
+        msg    : 'User signup completed successfully!',
+        token
+      });
+    } catch (err) {
+      console.error('[signup] error:', err);
+      return res.status(500).json({ msg: 'Internal Server Error' });
     }
-
-   try{
-        const cpassword = await bcrypt.hash(password,process.env.BCRYPT_SLAT_ROUND)
-
-        const userLoad = {
-            first_name,
-            last_name,
-            phone_number,
-            password:cpassword,
-            isEmailVerfied:false
-        }
-        const user = await Users.create(userLoad)
-
-        const {password:nPassword,userDetails} = user
-        const token = await jwt.sign(userDetails,process.env.AUTH_TOKEN)
-    
-        res.cookie('token',token,{
-            maxAge: 7 * 24 * 60 * 60 * 1000,       
-            httpOnly: true,            
-            secure: process.env.NODE_ENV === 'production', 
-            sameSite: 'lax'
-        })
-        res.status(200).json({msg:"Login Successfull!"})
-
-        res.status(201).json({success:true,msg:"User signup completed successfully!"})
-   }
-   catch(err){
-        console.log(err)
-        res.status(500).json({msg:"Internal Server Errro"})
-   }
-}
+};
 
 exports.login = async (req,res)=>{
 
@@ -55,17 +84,17 @@ try{
 
     if(!user) return res.status(403).json({msg:"User not exist please signup"})
 
-    const isMatch = await bcrypt.verify(password,user.password)
+    const isMatch = await bcrypt.compare(password,user.password)
     
     if(!isMatch){
         return res.status(401).json({msg:"Invalid credentials!"})
     }
 
-    const {password:cpassword,userDetails} = user
-    const token = await jwt.sign(userDetails,process.env.AUTH_TOKEN)
+    const payload = { id: user.id, phone_number: user.phone_number };
+    const token   = jwt.sign(payload, process.env.AUTH_TOKEN, { expiresIn: '7d' });
 
     res.cookie('token',token,{
-        maxAge: sevenDays,       
+        maxAge: 7 * 24 * 60 * 60 * 1000,       
         httpOnly: true,            
         secure: process.env.NODE_ENV === 'production', 
         sameSite: 'lax'
@@ -97,32 +126,12 @@ exports.updateValue = async(req,res)=>{
 exports.verifyOtp = async (req, res) => {
     try {
       const { loginId, code } = req.body;
-  
-      if (!loginId || !code) {
-        return res.status(400).json({ msg: 'loginId and code are required' });
-      }
-  
-      /* 1️⃣  Only fetch rows that are still within the 10-minute window */
-      const cutoff = new Date(Date.now() - 10 * 60 * 1000); // now − 10 min
-  
-      const otpRow = await TableOtps.findOne({
-        where: {
-          loginId,
-          updatedAt: { [Op.gt]: cutoff }      // updated within the last 10 min
-        }
-      });
-  
-      if (!otpRow) {
-        return res.status(410).json({ msg: 'OTP expired or not found' });
-      }
-  
-      /* 2️⃣  Compare codes */
-      if (otpRow.code != code) {
-        return res.status(403).json({ msg: 'OTP not matched' });
-      }
-  
-      /* 3️⃣  Verification succeeded → delete the OTP so it can’t be reused */
-      await otpRow.destroy();
+
+      await validateOtp(loginId,code)
+
+      await Users.update({is_Phone_verified:true},{where:{
+        phone_number:loginId
+      }})
   
       return res.status(200).json({ msg: 'Verification done' });
     } catch (err) {
@@ -135,20 +144,9 @@ exports.verifyOtp = async (req, res) => {
 exports.sendOtp = async(req,res)=>{
 try{
     const {phone_number,first_name,last_name} = req.body
-    const code = parseInt(Math.random()*10000)
-    
-    const otpExists = await TableOtps.findOne({where:{loginId:phone_number}})
-
-    if(otpExists){
-        await otpExists.update({loginId:phone_number,code})
-    }
-    else{
-        TableOtps.create({loginId:phone_number,code})
-    }
-
-    //Send Otp to telegram,
-    TelegramService.sendOtpMessage(phone_number,code,first_name,last_name)
-    res.status(201).json({msg:"Successfully created!"})
+    const loginId = phone_number
+    await requestOtp(loginId,first_name,last_name)
+    res.status(201).json({msg:"OTP Send Successfully"})
 }
 catch(err){
     console.log(err)
