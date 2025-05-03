@@ -1,0 +1,18 @@
+const jwt = require('jsonwebtoken')
+exports.auth = async (req,res,next)=>{
+
+    const token = req.cookies('token')
+
+    if(!token) return res.status(401).json({msg:"Please login"})
+
+    try{
+        const user = jwt.verify(token,process.env.AUTH_TOKEN)
+        req.user = user
+        next()
+    }
+    catch(err){
+        console.log(err)
+        return res.status(401).json({msg:"Login Required"})
+    }
+
+}

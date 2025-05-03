@@ -10,7 +10,7 @@ const Tracking = sequelize.define("tbltracking", {
         unique: true
     },
     urlId: {
-        type: DataTypes.STRING,
+        type: DataTypes.INTEGER,
         allowNull: false,
         references: {
             model: TableUrl,
@@ -34,12 +34,12 @@ const Tracking = sequelize.define("tbltracking", {
 });
 
 
-Url.hasMany(Tracking, {
+TableUrl.hasMany(Tracking, {
     foreignKey: 'id',
     sourceKey: 'id'
 });
 
-Tracking.belongsTo(Url, {
+Tracking.belongsTo(TableUrl, {
     foreignKey: 'id',
     targetKey: 'id'
 });

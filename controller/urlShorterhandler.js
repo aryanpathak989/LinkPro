@@ -38,12 +38,12 @@ exports.urlShortner = async (req, res) => {
         console.log(ip)
         // Get location using IP
         let location = ip
-        // try {
-        //     const geoRes = await fetch(`https://ipapi.co/${ip}/json/`);
-        //     location = await geoRes.json();
-        // } catch (err) {
-        //     console.warn('Location fetch failed:', err.message);
-        // }
+        try {
+            const geoRes = await fetch(`https://ipapi.co/${ip}/json/`);
+            location = await geoRes.json();
+        } catch (err) {
+            console.warn('Location fetch failed:', err.message);
+        }
 
         // Optional: store or log tracking info
         console.log({
@@ -91,7 +91,7 @@ exports.getActualUrl = async (req, res) => {
         if (!url) return res.status(200).send("Url not found");
 
         // 3. Cache result
-        // await redis.set(actualUrl, url.actualUrl, 'EX', 3600);
+        await redis.set(actualUrl, url.actualUrl, 'EX', 3600);
 
         // 4. Redirect
         res.redirect(url.actualUrl);
@@ -123,14 +123,14 @@ async function trackUser(req, urlId) {
         console.log(ip)
         console.log(browser,os,deviceType,deviceModel,emailClient)
         let location = ip;
-        // try {
-        //     const geoRes = await fetch(`https://ipapi.co/${ip}/json/`);
-        //     location = await geoRes.json();
-        // } catch (err) {
-        //     console.warn('Location fetch failed:', err.message);
-        // }
+        try {
+            const geoRes = await fetch(`https://ipapi.co/${ip}/json/`);
+            location = await geoRes.json();
+        } catch (err) {
+            console.warn('Location fetch failed:', err.message);
+        }
 
-        // await Tracking.create();
+        await Tracking.create();
         return {
             urlId,
             ip,
@@ -148,6 +148,10 @@ async function trackUser(req, urlId) {
     } catch (err) {
         console.error("Tracking error:", err.message);
     }
+}
+
+exports.updateUrlDetails = async(req,res)=>{
+    
 }
 
 
