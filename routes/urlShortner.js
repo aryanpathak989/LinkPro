@@ -1,8 +1,8 @@
 const { urlShortner, getActualUrl,updateUrlDetails } = require('../controller/urlShorterhandler')
 const router = require('express').Router()
+const { auth } = require('../middleware/auth')
 
-
-router.post("/create",urlShortner)
-router.post("/update",updateUrlDetails)
+router.post("/create",auth,urlShortner)
+router.post("/update",auth,updateUrlDetails)
 
 module.exports = router

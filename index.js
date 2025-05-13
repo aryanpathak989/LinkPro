@@ -3,6 +3,7 @@ const app = express()
 const urlroutes = require("./routes/urlShortner")
 const urlReads = require("./routes/url")
 const UserRoutes = require('./routes/users')
+const overviewRoutes = require('./routes/overview')
 const cors = require('cors')
 const db = require('./lib/database')
 const cookieParser = require('cookie-parser');
@@ -28,7 +29,12 @@ app.use(cors())
 app.use("",urlReads)
 app.use("/url",urlroutes)
 app.use("/user",UserRoutes)
+app.use("/dashboard", overviewRoutes)
 // app.use("/analysis",analysisRoutes)
+
+// Set up EJS as the view engine
+app.set('view engine', 'ejs');
+app.set('views', './views');
 
 app.listen(PORT,async ()=>{
     db.sync()

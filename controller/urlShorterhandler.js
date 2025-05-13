@@ -1,69 +1,43 @@
 const { where } = require("sequelize")
 const Url = require("../models/TableUrl")
 const tracking = require('../models/Tracking')
+const redis = require('../lib/redis')
 // const redis = require('../lib/redis')
 
 const UAParser = require('ua-parser-js');
 const fetch = require('node-fetch'); // adjust path if needed
 const Tracking = require("../models/Tracking");
+const e = require("express");
 const chMap = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 exports.urlShortner = async (req, res) => {
     try {
-        const { url } = req.body;
+        const { url,expiryDate } = req.body;
+
+        try {
+            new URL(url);
+        } catch (_) {
+            return res.status(400).json({ success: false, message: "Invalid URL provided" });
+        }
 
         // Generate short URL
         let num = await Url.max("id") + 1;
-        let temp = "";
+        let temp = ""
         while (num > 0) {
             let ind = parseInt(num % 62);
             num = Math.floor(num / 62);
             temp += chMap[ind];
         }
 
-        // User Agent Info
-        const parser = new UAParser(req.headers['user-agent']);
-        console.log()
-        const uaResult = parser.getResult();
-
-        const browser = uaResult.browser.name + ' ' + uaResult.browser.version;
-        const os = uaResult.os.name + ' ' + uaResult.os.version;
-        const deviceType = uaResult.device.type || 'desktop';
-        const deviceModel = uaResult.device.model || 'unknown';
-        const deviceVendor = uaResult.device.vendor || 'unknown';
-        const emailClient = 'Not detectable in server request';
-
-        // Get client IP (supports proxy environments)
-        const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.connection.remoteAddress;
-        console.log(ip)
-        // Get location using IP
-        let location = ip
-        try {
-            const geoRes = await fetch(`https://ipapi.co/${ip}/json/`);
-            location = await geoRes.json();
-        } catch (err) {
-            console.warn('Location fetch failed:', err.message);
-        }
-
-        // Optional: store or log tracking info
-        console.log({
-            browser,
-            os,
-            deviceType,
-            deviceModel,
-            deviceVendor,
-            ip,
-            location,
-            emailClient
-        });
-
         // Save short URL
         await Url.create({
-            urlId: temp,
-            actualUrl: url
+            user_id:req.user.id,
+            shortUrl:temp,
+            actualUrl: url,
+            expiryDate
         });
 
-        res.status(200).json({ success: true, data: 'http://localhost:4000/' + temp });
+        res.status(200).json({ success: true, data: process.env.BASE_URL + temp });
     } catch (err) {
         console.log(err);
         res.status(500).send("Internal Server Error");
@@ -74,12 +48,15 @@ exports.urlShortner = async (req, res) => {
 exports.getActualUrl = async (req, res) => {
     try {
         const actualUrl = req.params.url;
+        console.log(actualUrl)
 
         // 1. Check Redis cache
         const cached = await redis.get(actualUrl);
         if (cached) {
             console.log("Getting url from cached server");
-            res.redirect(cached);
+            const parsedUrl = JSON.parse(cached);
+            console.log("The parsed url is ",parsedUrl)
+            res.redirect(parsedUrl);
 
             // Run tracking in background
             trackUser(req, actualUrl);
@@ -87,18 +64,25 @@ exports.getActualUrl = async (req, res) => {
         }
 
         // 2. Fallback to DB
-        const url = await Url.findOne({ where: { urlId: actualUrl } });
-        if (!url) return res.status(200).send("Url not found");
+        const url = await Url.findOne({ where: { shortUrl: actualUrl },raw:true });
+        if (!url) return res.status(404).render('404');
+        try{
+            res.redirect(url.actualUrl);
+        }
+        catch(err){
+            console.log(err)
+        }
 
+        try{
         // 3. Cache result
-        await redis.set(actualUrl, url.actualUrl, 'EX', 3600);
-
-        // 4. Redirect
-        res.redirect(url.actualUrl);
+        await redis.set(actualUrl, JSON.stringify(url.actualUrl));
 
         // 5. Background tracking (non-blocking)
-        const result  =await  trackUser(req, "testing");
-        res.status(200).send(result)
+        await  trackUser(req, url.id);
+        }
+        catch(err){
+            console.log(err)
+        }
 
     } catch (err) {
         console.log(err);
@@ -107,7 +91,7 @@ exports.getActualUrl = async (req, res) => {
 };
 
 // Async background tracking function
-async function trackUser(req, urlId) {
+async function trackUser(req, shortUrl) {
     try {
         const parser = new UAParser(req.headers['user-agent']);
         const uaResult = parser.getResult();
@@ -115,12 +99,11 @@ async function trackUser(req, urlId) {
         const browser = uaResult.browser.name + ' ' + uaResult.browser.version;
         const os = uaResult.os.name + ' ' + uaResult.os.version;
         const deviceType = uaResult.device.type || 'desktop';
-        const deviceModel = uaResult.device.model || 'unknown';
-        const deviceVendor = uaResult.device.vendor || 'unknown';
+        const deviceModel = uaResult.device.model || 'other';
+        const deviceVendor = uaResult.device.vendor || 'other';
         const emailClient = 'Not detectable in server';
 
         const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.connection.remoteAddress;
-        console.log(ip)
         console.log(browser,os,deviceType,deviceModel,emailClient)
         let location = ip;
         try {
@@ -129,11 +112,10 @@ async function trackUser(req, urlId) {
         } catch (err) {
             console.warn('Location fetch failed:', err.message);
         }
-
-        await Tracking.create();
-        return {
-            urlId,
-            ip,
+        const urlDetails = await Url.findOne({where:{shortUrl},raw:true})
+        await Tracking.create({
+            urlId:urlDetails.id,
+            ip, 
             browser,
             os,
             deviceType,
@@ -142,16 +124,26 @@ async function trackUser(req, urlId) {
             city: location.city || null,
             region: location.region || null,
             country: location.country_name || null,
-            emailClient
-        }
+            emailClient:emailClient == "Not detectable in server" || !emailClient ? null : emailClient
+        });
 
     } catch (err) {
-        console.error("Tracking error:", err.message);
+        console.error("Tracking error:", err);
     }
 }
 
 exports.updateUrlDetails = async(req,res)=>{
-    
+    const {urlId,actualUrl,expiryDate} = req.body
+    try{
+        const urlDetails = await Url.findOne({where:{id:urlId, user_id:req.user.id},raw:true})
+        if(!urlDetails) return res.status(404).json({success:false,message:"Url not found"})
+        await Url.update({actualUrl,expiryDate},{where:{id:urlId}})
+        res.status(200).json({success:true,message:"Url updated successfully"})
+    }
+    catch(err){
+        console.log(err)
+        res.status(500).json({success:false,message:"Internal server error"})
+    }
 }
 
 

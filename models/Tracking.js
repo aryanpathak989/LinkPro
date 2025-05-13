@@ -34,14 +34,13 @@ const Tracking = sequelize.define("tbltracking", {
 });
 
 
+// Correct: urlId in Tracking references id in TableUrl
 TableUrl.hasMany(Tracking, {
-    foreignKey: 'id',
-    sourceKey: 'id'
+    foreignKey: 'urlId'
 });
 
 Tracking.belongsTo(TableUrl, {
-    foreignKey: 'id',
-    targetKey: 'id'
+    foreignKey: 'urlId'
 });
 
 module.exports = Tracking;
