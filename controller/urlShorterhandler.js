@@ -12,7 +12,7 @@ const chMap = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 exports.urlShortner = async (req, res) => {
     try {
-        const { url,expiryDate } = req.body;
+        const { url,expiryDate,name } = req.body;
 
         try {
             new URL(url);
@@ -32,6 +32,7 @@ exports.urlShortner = async (req, res) => {
         // Save short URL
         await Url.create({
             user_id:req.user.id,
+            name,
             shortUrl:temp,
             actualUrl: url,
             expiryDate

@@ -16,26 +16,46 @@ const Users = sequelize.define("tbluser", {
     type: DataTypes.STRING,
     allowNull: false
   },
-  password:{
-    type:DataTypes.STRING,
-    allowNull:false
+  email: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    unique: true,
+    validate: {
+      isEmail: true
+    }
   },
-  phone_number:{
-    type:DataTypes.STRING,
-    allowNull:false,
-    unique:true
+  password: {
+    type: DataTypes.STRING,
+    allowNull: true // Made optional for social login
   },
-  phone_code:{
-    type:DataTypes.INTEGER,
-    allowNull:false
+  phone_number: {
+    type: DataTypes.STRING,
+    allowNull: true, // Made optional for social login
+    unique: true
+  },
+  phone_code: {
+    type: DataTypes.INTEGER,
+    allowNull: true // Made optional for social login
   },
   is_Phone_verified: {
     type: DataTypes.BOOLEAN,
     defaultValue: false
   },
-  preferences:{
-    type:DataTypes.BOOLEAN,
-    defaultValue:true
+  preferences: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: true
+  },
+  profile_picture: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  auth_provider: {
+    type: DataTypes.ENUM('local', 'google', 'facebook', 'microsoft'),
+    defaultValue: 'local'
+  },
+  auth_provider_id: {
+    type: DataTypes.STRING,
+    allowNull: true
   }
 });
 

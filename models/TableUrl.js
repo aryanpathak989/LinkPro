@@ -17,6 +17,10 @@ const Url = sequelize.define("tblurl",{
         },
         allowNull:false
     },
+    name:{
+        type:DataTypes.STRING,
+        allowNull:false
+    },
     shortUrl:{
         type:DataTypes.STRING,
         unique:true
