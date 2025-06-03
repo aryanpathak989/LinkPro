@@ -9,6 +9,7 @@ exports.auth = async (req, res, next) => {
   try {
     const user = jwt.verify(token, process.env.AUTH_TOKEN);
     req.user = user;
+    console.log("This is user id"+req.user.id)
     next();
   } catch (err) {
     console.error("JWT verification failed:", err);

@@ -23,12 +23,11 @@ const Tracking = sequelize.define("tbltracking", {
     browser: DataTypes.STRING,
     os: DataTypes.STRING,
     deviceType: DataTypes.STRING,
-    deviceModel: DataTypes.STRING,
+    reference: DataTypes.STRING,
     deviceVendor: DataTypes.STRING,
     city: DataTypes.STRING,
     region: DataTypes.STRING,
     country: DataTypes.STRING,
-    emailClient: DataTypes.STRING
 }, {
     timestamps: true
 });

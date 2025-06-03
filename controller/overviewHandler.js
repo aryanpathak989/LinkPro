@@ -5,7 +5,7 @@ const Tracking = require('../models/Tracking');
 exports.getOverview = async (req, res) => {
   try {
     req.user.id = 1
-    const filter = req.query.filter || '7days';
+    const filter = req.query.filter || '14days';
 
     const now = new Date();
     const currentEnd = new Date();
@@ -62,9 +62,14 @@ exports.getOverview = async (req, res) => {
     });
 
     // DB Call 2: All tracking entries for both periods
+    const urlIds = allUrls.map(url => url.id);
+
     const allTrackings = await Tracking.findAll({
       attributes: ['ip', 'createdAt', 'deviceType'],
       where: {
+        urlId: {
+          [Op.in]: urlIds
+        },
         createdAt: {
           [Op.gte]: previousStart,
           [Op.lt]: currentEnd
@@ -221,6 +226,193 @@ formattedUrls.push({
   }
 };
 
+exports.getOverview2 = async (req,res)=>{
+  const {filter = "7days"} = req.query
+  const user_id = req.user.id
+  console.log(user_id)
+  
+  const now = new Date()
+  let currentEndDate = new Date()
+  let currentStartDate = new Date()
+  let previousStartDate = new Date()
+  let weeklyStartDate = new Date()
+  weeklyStartDate.setDate(now.getDate()-7)
+
+  switch(filter){
+    case "14days":
+      currentStartDate.setDate(now.getDate()-14);
+      previousStartDate.setDate(now.getDate()-28);
+      return;
+    case "1month":
+      currentStartDate.setDate(now.getMonth()-1);
+      previousStartDate.setDate(now.getMonth()-2);
+      return;  
+    case "3months":
+      currentStartDate.setDate(now.getMonth()-3);
+      previousStartDate.setDate(now.getMonth()-6);
+      return;
+    case "6months":
+      currentStartDate.setDate(now.getMonth()-6);
+      previousStartDate.setDate(now.getMonth(-12));
+      return;
+    case "1year":
+      currentStartDate.setDate(now.getFullYear()-1);
+      previousStartDate.setDate(now.getFullYear()-2);  
+      return;
+    default:
+      currentStartDate.setDate(now.getDate()-7);
+      previousStartDate.setDate(now.getDate()-14)   
+  }
+  const urlData = await Url.findAll({
+    where:{
+        user_id,
+        createdAt:{
+          [Op.between]:[previousStartDate,currentEndDate]
+        }
+    },
+    attributes:{exclude:['updatedAt','createdAt','expiryDate','actualUrl',,'user_id']},
+    include:{
+      model:Tracking,
+      required:false,
+      attributes:{exclude:['deviceVendor','reference','os','browser','deviceVendor','city','region','country','updatedAt']},
+      where:{
+        createdAt:{
+          [Op.between]:[previousStartDate,currentEndDate]
+        }
+      },
+      order: [['createdAt', 'DESC']]
+    },
+    order: [['createdAt', 'DESC']]
+  })
+
+  const currentUrlCreated = urlData.flatMap((item)=>{
+    return item.id
+  })
+
+  const previousUrlCreated = urlData.flatMap((item)=>{
+    return item.id
+  })
+
+  const previousTrack = urlData.flatMap((item)=>{
+    return item.tbltrackings.filter((e)=>e.createdAt<currentStartDate)
+  })
+
+  const currentTrack = urlData.flatMap((item)=>{
+    return item.tbltrackings.filter((e)=>e.createdAt>=currentStartDate)
+  })
+
+  const currentIptracking = currentTrack.flatMap((item)=> item.ip)
+
+  const currentGroupByIp = new Set(currentIptracking.map((e)=>e))
+
+  const previousIptracking = previousTrack.flatMap((item)=> item.ip)
+  const previousGroupByIp = new Set(previousIptracking.map((e)=>e))
+  
+  
+  //recentlink
+
+  const urls = urlData.map((item)=>{
+    const {tbltrackings,...urlInfo} = item.get({plain:true})
+    const mp ={};
+      if(tbltrackings && tbltrackings.length>0){
+          tbltrackings.map((e)=>{
+            const date = e.createdAt
+            if(date<currentStartDate) return
+            if(mp[date]){
+              mp[date]++;
+            }
+            else{
+              mp[date]=1
+            }
+          })
+      }
+
+      const dateArray = []
+      
+      for(const [key,value] of Object.entries(mp)){
+          dateArray.push(
+            {
+              data: new Date(key),
+              clicks:value
+            }
+          )
+      }
+    return {...urlInfo,chartData:dateArray}
+  }).slice(0,4)
+
+  //devicebreakdown
+  const deviceBreakdown = {
+    mobile:0,
+    desktop:0,
+    tablet:0,
+    other:0
+  }
+
+  //weeklyTracks
+  const weekStartDte = new Date(now.getDate()-7);
+
+  //weeksly
+  const weeklyMap={}
+
+  currentTrack.map((item)=>{
+
+    if(item.createdAt>=weekStartDte){
+      if(weeklyMap[item.createdAt]){
+        weeklyMap[item.createdAt]++
+      }
+      else{
+        weeklyMap[item.createdAt] = 1
+      }
+    }
+
+    switch(item.deviceType){
+      case "desktop":
+        deviceBreakdown['desktop']++
+        break;
+      case 'mobile':
+        deviceBreakdown['mobile']++
+        break;
+      case 'tablet':
+        deviceBreakdown['tablet']++
+        break;
+      default:
+        deviceBreakdown['other']++  
+    }
+  })
+
+  // weeklyclicks
+
+  const weekData = []
+
+  for(const [key,value] of Object.entries(weeklyMap)){
+    weekData.push(
+      {
+        date:new Date(key),
+        clicks:value
+      }
+    )
+  }
+
+
+
+  //totallinks,totalclicks,activeuser,averageClicks.
+  const totalLinks = currentUrlCreated?.length ?? 0
+  const totalCicks = currentTrack?.length ?? 0
+  const activeUsers = currentGroupByIp.size
+  const previousTotalLinks = previousUrlCreated?.length ?? null
+  const previousTotalClicks = previousTrack?.length ?? null
+  const previousActiveUser = previousGroupByIp.size === 0? null:previousGroupByIp.size
+  const averageClicks = totalCicks/totalLinks
+  const totalLinkCutoff = previousTotalClicks?(((totalLinks-previousTotalLinks)/previousTotalLinks)*100).toFixed(2):null
+  const totalClickCutoff = previousTotalClicks?(((totalCicks-previousTotalClicks)/previousTotalClicks)*100).toFixed(2):null
+  const activeUserCutOff = previousActiveUser?(((activeUsers-previousActiveUser)/previousActiveUser)*100).toFixed(2):null
+
+  // const activeUser
+
+
+  res.status(200).send({totalLinks,totalCicks,activeUsers,averageClicks,totalLinkCutoff,totalClickCutoff,activeUserCutOff,urls,deviceBreakdown,weeklyClicks:weekData})
+}
+
 
 exports.listUrls = async (req, res) => {
     try {
@@ -296,49 +488,82 @@ exports.listUrls = async (req, res) => {
 }; 
 
 
-
 exports.getUrlAnalyticsById = async (req, res) => {
   try {
-    const { urlId,filter } = req.query;
+    const { urlId } = req.query;
     console.log(urlId)
     const now = new Date();
     const startOfThisWeek = new Date(now);
     startOfThisWeek.setDate(now.getDate() - now.getDay()); // Sunday of this week
     const startOfLastWeek = new Date(startOfThisWeek);
     startOfLastWeek.setDate(startOfThisWeek.getDate() - 7); // Sunday of last week
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-const url = await Url.findOne({
-  where: { id: urlId },
-  attributes: { exclude: ['updatedAt'] }, // Correct use of exclude
-  include: [
-    {
-      model: Tracking,
-      required: true,
-      attributes: ['id'], // Only fetch the 'id' field from Tracking
-    },
-  ],
-});
+   const url = await Url.findOne({
+        where: { id: urlId },
+        attributes: [
+          'id', 'user_id', 'name', 'shortUrl', 'actualUrl', 'expiryDate', 'createdAt', 'updatedAt',
+          [fn('COUNT', col('tbltrackings.id')), 'trackingCount']
+        ],
+        include: [
+          {
+            model: Tracking,
+            required: false,
+            attributes: []
+          }
+        ],
+        group: ['tblurl.id']
+      });
+
 
     if (!url) {
       return res.status(404).json({ success: false, message: "URL not found" });
     }
 
-    // const thisWeek = parseInt(url.thisWeekClicks || 0);
-    // const lastWeek = parseInt(url.lastWeekClicks || 0);
-    // let weeklyChange = 0;
+    const thisMonthTracking = await Tracking.findAll({
+      attributes:['createdAt'],
+      where: {
+        urlId: urlId,
+        createdAt: {
+          [Op.gte]: startOfMonth,
+        },
+      },
+    });
 
-    // if (lastWeek > 0) {
-    //   weeklyChange = ((thisWeek - lastWeek) / lastWeek) * 100;
-    // } else if (thisWeek > 0) {
-    //   weeklyChange = 100;
-    // }
+const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+const fourteenDaysAgo = new Date(now - 14 * 24 * 60 * 60 * 1000);
+
+const thisWeekValue = thisMonthTracking.filter(
+  (item) => item.createdAt >= sevenDaysAgo
+);
+
+const lastWeekValue = thisMonthTracking.filter(
+  (item) => item.createdAt < sevenDaysAgo && item.createdAt >= fourteenDaysAgo
+);
+
+    let percentageChange ;
+    if(lastWeekValue.length == 0){ percentageChange  = null}
+    else{
+     percentageChange =  ((thisWeekValue.length - lastWeekValue.length) / lastWeekValue.length) * 100
+    }
+
+    const urlData = url.toJSON()
+const todayClick = thisMonthTracking.filter(
+  (item) => item.createdAt >= new Date(now - 24 * 60 * 60 * 1000)
+);
 
     res.json({
       success: true,
-      data: url,
+      data:{
+        ...urlData, 
+        cutoff:percentageChange,
+        monthClicks:thisMonthTracking.length,
+        weeklyClick:thisWeekValue.length,
+        todayClick:todayClick.length
+      }
     });
   } catch (err) {
     console.error("Error in getUrlAnalyticsById:", err);
     res.status(500).json({ success: false, error: "Something went wrong" });
   }
-};
+};  
