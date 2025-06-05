@@ -242,27 +242,30 @@ exports.getOverview2 = async (req,res)=>{
     case "14days":
       currentStartDate.setDate(now.getDate()-14);
       previousStartDate.setDate(now.getDate()-28);
-      return;
+      break;
     case "1month":
-      currentStartDate.setDate(now.getMonth()-1);
-      previousStartDate.setDate(now.getMonth()-2);
-      return;  
+      currentStartDate.setMonth(now.getMonth()-1);
+      previousStartDate.setMonth(now.getMonth()-2);
+      break;  
     case "3months":
-      currentStartDate.setDate(now.getMonth()-3);
-      previousStartDate.setDate(now.getMonth()-6);
-      return;
+      currentStartDate.setMonth(now.getMonth()-3);
+      previousStartDate.setMonth(now.getMonth()-6);
+      break;
     case "6months":
-      currentStartDate.setDate(now.getMonth()-6);
-      previousStartDate.setDate(now.getMonth(-12));
-      return;
+      currentStartDate.setMonth(now.getMonth()-6);
+      previousStartDate.setMonth(now.getMonth()-12);
+      break;
     case "1year":
-      currentStartDate.setDate(now.getFullYear()-1);
-      previousStartDate.setDate(now.getFullYear()-2);  
-      return;
+      currentStartDate.setFullYear(now.getFullYear()-1);
+      previousStartDate.setFullYear(now.getFullYear()-2);  
+      break;
     default:
       currentStartDate.setDate(now.getDate()-7);
       previousStartDate.setDate(now.getDate()-14)   
   }
+
+
+  // console.log(currentEndDate,previousStartDate)
   const urlData = await Url.findAll({
     where:{
         user_id,
@@ -328,8 +331,10 @@ exports.getOverview2 = async (req,res)=>{
       }
 
       const dateArray = []
+      let indiviualUrlClicks = 0
       
       for(const [key,value] of Object.entries(mp)){
+        indiviualUrlClicks += value || 0
           dateArray.push(
             {
               data: new Date(key),
@@ -337,19 +342,17 @@ exports.getOverview2 = async (req,res)=>{
             }
           )
       }
-    return {...urlInfo,chartData:dateArray}
+    return {...urlInfo,clicks:indiviualUrlClicks,chartData:dateArray}
   }).slice(0,4)
 
   //devicebreakdown
   const deviceBreakdown = {
     mobile:0,
     desktop:0,
-    tablet:0,
-    other:0
+    tablet:0  
   }
 
-  //weeklyTracks
-  const weekStartDte = new Date(now.getDate()-7);
+  const weekStartDte = weeklyStartDate
 
   //weeksly
   const weeklyMap={}
@@ -357,11 +360,13 @@ exports.getOverview2 = async (req,res)=>{
   currentTrack.map((item)=>{
 
     if(item.createdAt>=weekStartDte){
-      if(weeklyMap[item.createdAt]){
-        weeklyMap[item.createdAt]++
+      const date = item.createdAt.toISOString().split('T')[0];
+      console.log(date)
+      if(weeklyMap[date]){
+        weeklyMap[date]++
       }
       else{
-        weeklyMap[item.createdAt] = 1
+        weeklyMap[date] = 1
       }
     }
 
@@ -380,18 +385,25 @@ exports.getOverview2 = async (req,res)=>{
     }
   })
 
+  const deviceBreakDownArray = [{device:'desktop',count:deviceBreakdown.desktop},{device:'mobile',count:deviceBreakdown.mobile},{device:'tablet',count:deviceBreakdown.tablet}]
   // weeklyclicks
 
   const weekData = []
 
-  for(const [key,value] of Object.entries(weeklyMap)){
-    weekData.push(
-      {
-        date:new Date(key),
-        clicks:value
-      }
-    )
-  }
+  console.log("-------------------------")
+
+  while (weekStartDte < currentEndDate) {
+  const dateStr = weekStartDte.toISOString().split('T')[0];
+  const clicks = weeklyMap[dateStr] || 0;
+  console.log(dateStr,weeklyMap[dateStr])
+
+  weekData.push({
+    date: new Date(weekStartDte), // clone the date to preserve current value
+    clicks,
+  });
+
+  weekStartDte.setDate(weekStartDte.getDate() + 1);
+}
 
 
 
@@ -402,7 +414,8 @@ exports.getOverview2 = async (req,res)=>{
   const previousTotalLinks = previousUrlCreated?.length ?? null
   const previousTotalClicks = previousTrack?.length ?? null
   const previousActiveUser = previousGroupByIp.size === 0? null:previousGroupByIp.size
-  const averageClicks = totalCicks/totalLinks
+  const averageClicks = isNaN(totalCicks/totalLinks)?0:(totalCicks/totalLinks)
+  const averageClicksLabel = isNaN(averageClicks)?'Bad':(averageClicks < 100 ? "Bad" : (averageClicks < 250) ? "Average" : (averageClicks < 400 ? "Good" : "Excellent"))
   const totalLinkCutoff = previousTotalClicks?(((totalLinks-previousTotalLinks)/previousTotalLinks)*100).toFixed(2):null
   const totalClickCutoff = previousTotalClicks?(((totalCicks-previousTotalClicks)/previousTotalClicks)*100).toFixed(2):null
   const activeUserCutOff = previousActiveUser?(((activeUsers-previousActiveUser)/previousActiveUser)*100).toFixed(2):null
@@ -410,7 +423,11 @@ exports.getOverview2 = async (req,res)=>{
   // const activeUser
 
 
-  res.status(200).send({totalLinks,totalCicks,activeUsers,averageClicks,totalLinkCutoff,totalClickCutoff,activeUserCutOff,urls,deviceBreakdown,weeklyClicks:weekData})
+  res.status(200).send({success:true,data:{totalLinks,totalClicks:totalCicks,activeUser:activeUsers,ctr:averageClicks,ctrLabel:averageClicksLabel,totalLinkCutoff,totalClickCutoff,activeUserCutOff,urls,deviceBreakdown:deviceBreakDownArray,weeklyClicks:weekData,    change: {
+      totalLinks: totalLinkCutoff, // as string percentage e.g., "300.00"
+      totalClicks: totalClickCutoff,
+      activeUser: activeUserCutOff
+    }}})
 }
 
 

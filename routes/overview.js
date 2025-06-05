@@ -7,4 +7,4 @@ router.get('/overview', auth, getOverview2);
 router.get('/list', auth, listUrls);
 router.get("/url-details",auth,getUrlAnalyticsById)
 
-module.exports = router; 
+module.exports = router;

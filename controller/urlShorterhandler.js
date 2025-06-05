@@ -2,6 +2,7 @@ const { where } = require("sequelize")
 const Url = require("../models/TableUrl")
 const tracking = require('../models/Tracking')
 const redis = require('../lib/redis')
+const {referrenceKey} = require('../config/constant')
 // const redis = require('../lib/redis')
 
 const UAParser = require('ua-parser-js');
@@ -9,6 +10,16 @@ const fetch = require('node-fetch'); // adjust path if needed
 const Tracking = require("../models/Tracking");
 const e = require("express");
 const chMap = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+const dbPath = path.join(
+  'C:',
+  'Users',
+  'Aryan',
+  'Downloads',
+  'GeoLite2-City_20250603',
+  'GeoLite2-City_20250603',
+  'GeoLite2-City.mmdb'
+);
 
 exports.urlShortner = async (req, res) => {
     try {
@@ -102,30 +113,49 @@ async function trackUser(req, shortUrl) {
         const deviceType = uaResult.device.type || 'desktop';
         const deviceModel = uaResult.device.model || 'other';
         const deviceVendor = uaResult.device.vendor || 'other';
-        const emailClient = 'Not detectable in server';
+        let city =null,region = null,country = null
 
+        //getting ip info
         const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.connection.remoteAddress;
-        console.log(browser,os,deviceType,deviceModel,emailClient)
-        let location = ip;
         try {
-            const geoRes = await fetch(`https://ipapi.co/${ip}/json/`);
-            location = await geoRes.json();
+            const lookup = await maxmind.open(dbPath);
+            const geo = lookup.get(ip);
+            city = geo?.city?.names?.en || null;
+            region = geo?.subdivisions?.[0]?.iso_code || null;
+            country = geo?.country?.iso_code || null;            
         } catch (err) {
             console.warn('Location fetch failed:', err.message);
         }
+
+        //checking reference
+        let referrerUrl = req.headers['referer'] || null;
+        let referrerSource = 'Direct';
+
+        if (referrerUrl) {
+            try {
+                const refHost = new URL(referrerUrl).origin + '/';
+                referrerSource = referrenceKey[refHost] || null; // default to origin if not mapped
+            } catch (e) {
+                console.warn('Invalid referrer URL:', referrerUrl);
+        }
+    }
+
+
+
         const urlDetails = await Url.findOne({where:{shortUrl},raw:true})
         await Tracking.create({
             urlId:urlDetails.id,
             ip, 
             browser,
             os,
+            reference:referrerSource,
             deviceType,
             deviceModel,
             deviceVendor,
-            city: location.city || null,
-            region: location.region || null,
-            country: location.country_name || null,
-            emailClient:emailClient == "Not detectable in server" || !emailClient ? null : emailClient
+            city,
+            region,
+            country,
+            emailClient:null
         });
 
     } catch (err) {
